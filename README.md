@@ -1,8 +1,12 @@
 # Hey Muse for Portal
 
-A Meta Portal that answers as [Muse](https://gadgets.muse.ai), Meta's AI agent. Say "Hey Muse",
-ask something, and your own Muse answers out loud on the Portal's speakers, with an orb (or Muse's
-character, if you add it) on the screen.
+<p align="center">
+  <img src="docs/hero.gif" width="100%" alt="Hey Muse for Meta Portal: a Muse avatar talking in a video call">
+</p>
+
+A Meta Portal that answers as [Muse](https://gadgets.muse.ai), Meta's AI agent. Say "Hey Muse" and
+talk: your own Muse answers in its own voice, and in a video call its avatar talks on the Portal's
+screen, as in the Muse app.
 
 It is an ordinary app that runs alongside Portal OS: **no root and no firmware changes**. The Portal
 pairs with the Muse app like any Muse gadget, over its own Bluetooth.
@@ -13,9 +17,19 @@ Here all of that is gone and only the app is left: hey-muse's Muse client, pairi
 voice, built into an Android app the way [Wormhole Display](https://github.com/pgodlews/wormhole-display)
 is.
 
-![Hey Muse running on a Meta Portal+](docs/screenshot.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/home.png" alt="Hey Muse waiting on a Portal+, with the owner's Muse on screen"><br><sub><b>Waiting</b>: your Muse, as the Muse app shows it</sub></td>
+    <td width="50%"><img src="docs/call.gif" alt="A video call with Muse on a Portal+"><br><sub><b>Video call</b>: Muse talks on screen, in its own voice</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/settings.png" alt="The settings screen"><br><sub><b>Settings</b>: the few things you change, in big rows</sub></td>
+    <td width="50%"><img src="docs/advanced.png" alt="The advanced settings"><br><sub><b>Advanced</b>: pairing, the token, cloud voices, the Portal's switches</sub></td>
+  </tr>
+</table>
 
-> **Important:** This app has **not been tested** with live Muse conversations yet, as **Muse is not available in the UK yet**.
+> **Tested with live Muse** on a Portal+ (Gen 2) in the UK, November 2026: pairing, voice calls,
+> video calls and Muse's own voice. See [What was tested](#what-was-tested).
 >
 > **Not made by Meta.** This is a hobby project. Meta did not make it and does not endorse it. Muse
 > and Portal are Meta's. Using Muse this way is covered by Meta's
@@ -24,9 +38,13 @@ is.
 ## What it does
 
 - **"Hey Muse", or a tap.** The wake word is heard on the Portal itself; a tap anywhere works too.
-- **Muse answers out loud,** in a built-in voice (SVOX Pico) that needs no key and no internet of
-  its own, or in a cloud voice from an OpenAI-style speech endpoint, with the built-in voice as a
-  fallback.
+- **A video call with your Muse.** By default "Hey Muse" starts a call in which Muse's avatar talks
+  on screen in Muse's own voice, as in the Muse app. Saying goodbye, or **End call**, hangs up.
+- **Or a live voice call,** when video is off or Muse won't take one: you talk back and forth, see
+  what was said, and can cut Muse off.
+- **Or one question at a time,** when Muse won't take a call: the answer comes in Muse's own voice,
+  or in a built-in voice (SVOX Pico) that needs no key, or in a cloud voice from an OpenAI-style
+  speech endpoint.
 - **A follow-up without the wake word** when Muse's answer is a question.
 - **Things Muse can do on the Portal:** set timers and alarms, list and cancel them, change the
   volume, and stop a ring. Muse decides when to call them; nothing else on the Portal is reachable.
@@ -35,8 +53,10 @@ is.
 - **Keeps listening in the background,** starts when the Portal starts, brings itself to the front
   and requests system-wide audio focus when it hears "Hey Muse" (muting/ducking background media),
   and automatically returns to the background after 10 seconds of idle inactivity.
-- **Muse's character on the screen,** if you make it from your own copy of Meta's SDK. The character
-  is Meta's and is not in this app.
+- **Your Muse on the screen,** as you made it in the Muse app: its picture and the app's animations
+  (idle, working, waiting), fetched from your own Muse and kept only on your Portal.
+- **Fits every Portal:** sizes follow the screen, so the same app works on a Portal+, Portal, Portal
+  Go and Mini.
 
 Smart home control is not part of this: reaching your lights is Muse's own business, for example
 through [Muse Home Link](https://gadgets.muse.ai/home-link).
@@ -52,7 +72,6 @@ through [Muse Home Link](https://gadgets.muse.ai/home-link).
 - A Muse subscription, the Muse app on your phone, and an SDK token of your own from
   [gadgets.muse.ai](https://gadgets.muse.ai/settings/sdk-tokens) (Account → SDK tokens). It starts
   with `mgst_`. The token is personal: never publish it, and do not share it with another household.
-  *(Note: Muse is not available in the UK yet).*
 - Optional: a key for an OpenAI-style speech endpoint, for a more natural voice.
 
 ## Install
@@ -115,26 +134,35 @@ the same name. Muse is not told: also remove the device in the Muse app under Se
 ## What your voice does
 
 - The wake word is detected on the Portal. Nothing is sent while it waits.
-- After the wake word (or a tap), what you say, 60 seconds at most, goes to Muse as a recording.
-  Muse keeps it on the message in your Muse account and transcribes it there. Anyone who speaks to
-  the Portal is recorded into your account the same way.
+- After the wake word (or a tap), a call starts: until it ends, what the room says streams to your
+  Muse, which keeps the conversation in your Muse account. Anyone who speaks to the Portal is heard
+  the same way. A call ends when you say goodbye, tap **End call**, or nobody speaks for 45 seconds.
+- Without a call, what you say, 60 seconds at most, goes to Muse as a recording, kept on the message
+  in your Muse account.
 - With a cloud voice, the text of each answer goes to the speech provider (OpenAI unless you set
   another endpoint). With the built-in voice, nothing else leaves the Portal.
 - The pairing tokens, the SDK token and the speech key are kept in the app's private storage.
 
 ## Settings worth knowing
 
-- **Sensitivity** of the wake word: the middle is what the model was tuned for; higher wakes more
-  readily, and falsely more often.
+The first page has what you change day to day: **Video calls**, **Live conversation**, the
+**Voice** (Muse's own, the Portal's, or a cloud voice), **“Hey Muse”** and how easily it wakes
+(**Less / Normal / More**), **Show my Muse** and **Captions**. Everything technical is under
+**Advanced**: pairing, the SDK token, the cloud voice, and the switches below.
+
 - **Portal voice processing** uses the Portal's own beamforming, noise suppression and echo
   cancellation for the microphone. Turn it off if the wake word is often missed.
 - **Open on the wake word** brings the app to the front from the background. Android needs
   **Display over other apps** for that; the setting has an **Allow** button.
 
-## The Muse character
+## Your Muse on screen
 
-Without it the app draws a glowing orb that listens, thinks and talks. To have Muse's own character
-instead, make its sprite sheets from your own checkout of Meta's SDK and copy them over:
+With **Show my Muse** on, the app asks your Muse for its avatar (the picture you chose in the Muse
+app and the app's short animations) and keeps them in its private storage, checking for changes now
+and then. In a video call the circle shows Muse's live picture instead.
+
+Without an avatar the app draws a glowing orb. Another option is Meta's default gadget character,
+made from your own checkout of Meta's SDK:
 
 ```sh
 uv run --with pillow tools/muse-avatar/make_sprites.py --sdk ~/src/muse-gadget-sdk
@@ -146,20 +174,18 @@ has the details.
 
 ## What was tested
 
-Honestly: **not yet tested end-to-end with a live Muse account, as Muse is not available in the UK yet.**
+On a Portal+ (Gen 2, Android 10) with a live Muse account in the UK, November 2026:
 
-What is known:
+- Pairing with the Muse app on an iPhone, after a fix: Android renames Bluetooth asynchronously, and
+  advertising straight away sent the Portal's own name, which the Muse app does not list.
+- Voice calls in English and Polish, with captions, cutting in, and hanging up by goodbye or tap.
+- Video calls: Muse's live picture (H.264, about 22 frames a second) and voice (Opus) over UDP, and
+  over TCP when UDP is blocked; calls of a few minutes.
+- One question at a time, answered in Muse's own voice (an MP3 Muse makes for the reply).
+- The owner's avatar and its animations, fetched from Muse.
+- `go test -race ./...` in `core/` passes, including SRTP test vectors from RFC 3711 and from the SDK.
 
-- The app compiles, installs, and launches on a physical Portal+ (`arm64-v8a`), capturing audio via `VOICE_COMMUNICATION` and rendering the UI.
-- The Muse client, pairing protocol, timers and alarms, and the wake word pass their tests
-  (`go test ./...` in `core/`); the client and pairing are hey-muse's, which were tested against Muse
-  on an Echo Show 5.
-- The wake word model wakes on SVOX Pico saying "Hey Muse" and not on other speech.
-- The Pico voice bridge was run from Java against the real engine.
-- The Portal's microphone, Bluetooth peripheral mode and audio behave as
-  [the notes in AGENTS.md](AGENTS.md#the-portal) describe, from another Portal app's experience.
-
-If you try it, an issue that says which Portal and what happened helps the next person.
+Not yet tried: Portal Go, Portal Mini, Portal TV, and full duplex (talking over Muse).
 
 ## Troubleshooting
 
@@ -192,7 +218,8 @@ The Gradle build compiles the Go core into `app/libs/heymuse-core.aar` with gomo
 ## Credits
 
 - [hey-muse](https://github.com/wobsoriano/hey-muse), whose Muse client, pairing, wake word and voice
-  this is, built on [TECHO5](https://github.com/HuskerMinion/techo5) by HuskerMinion and EchoLocal by
+  this is, and [portal-muse](https://github.com/wobsoriano/portal-muse), whose notes on calls and on
+  the Portal pointed the way, built on [TECHO5](https://github.com/HuskerMinion/techo5) by HuskerMinion and EchoLocal by
   Yuri Gelfand. MIT.
 - Meta's [Muse Gadget SDK](https://github.com/facebookincubator/muse-gadget-sdk), Apache 2.0. The Muse
   client and the pairing code are ports of it.

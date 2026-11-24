@@ -167,8 +167,21 @@ class BlePeripheral(
         server = gatt
         tx = txc
 
-        savedName = adapter.name
-        adapter.name = name
+        // Keep the Portal's own name to put back on close. A restore from an earlier close may not
+        // have landed yet, so never take a gadget name for the Portal's own.
+        adapter.name?.takeIf { !it.startsWith(NAME_PREFIX) }?.let { savedName = it }
+        // setName is asynchronous, and the scan response takes the adapter's name as it is when
+        // advertising starts: advertise too soon and the phone sees the Portal's own name, which the
+        // Muse app does not list. Wait until the stack reports the new one.
+        if (adapter.name != name) {
+            adapter.name = name
+            val until = System.currentTimeMillis() + 5_000
+            while (adapter.name != name && System.currentTimeMillis() < until) Thread.sleep(50)
+            if (adapter.name != name) {
+                close()
+                throw IllegalStateException("Bluetooth did not take the name $name")
+            }
+        }
 
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
@@ -225,12 +238,13 @@ class BlePeripheral(
         server = null
         tx = null
         savedName?.let { n -> runCatching { adapter?.name = n } }
-        savedName = null
         Log.i(TAG, "off the air")
     }
 
     companion object {
         private const val TAG = "HeyMuseBle"
+        // The Muse app lists only devices whose name starts with this (pairing.BLENamePrefix).
+        private const val NAME_PREFIX = "MuseGadget"
         val SERVICE: UUID = UUID.fromString(Heymuse.ServiceUUID)
         val RX: UUID = UUID.fromString(Heymuse.RXUUID)
         val TX: UUID = UUID.fromString(Heymuse.TXUUID)

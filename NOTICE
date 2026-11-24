@@ -29,6 +29,22 @@ Muse client and Bluetooth setup (core/muse, core/muse/pairing)
     - app/.../BlePeripheral.kt serves the GATT shape of ble_server.py on Android.
   Test vectors, core/muse/pairing/testdata/link_pairing_v5.json (not shipped in the app): copied
   unchanged from linux/tests/vectors/link_pairing_v5.json.
+
+Live calls, video calls, Muse's voice and the owner's avatar (core/muse, core/muse/rtc)
+  Muse Gadget SDK, Apache License 2.0
+  Copyright (c) Meta Platforms, Inc. and affiliates.
+  https://github.com/facebookincubator/muse-gadget-sdk, at commit
+  fbfe3b0f717f7f468d0a94aa370ea0ca1a94ebfe. Modified ports to Go, each saying at its top which SDK
+  file it follows:
+    - core/muse/call.go from linux/src/musegadget/voice_call.py and voice_gate.py (realtime calls).
+    - core/muse/videocall.go from linux/src/musegadget/video_call.py; core/muse/rtc from
+      linux/src/musegadget/rtc/ (join.py, media.py, rtp.py, srtp.py, stun.py). Opus is left to the
+      Portal's own codecs. Its tests port vectors from linux/tests (test_video_call.py,
+      test_rtc_srtp.py), not shipped in the app.
+    - core/muse/voice.go from linux/src/musegadget/link_client.py (the TTS stream).
+    - core/muse/files.go from esp32/main/avatar_identity.c, avatar_clip_refs.c, avatar_sync.c and
+      vm_file_path.h (identity and file reads). The avatar it fetches is the owner's own, kept only
+      on their Portal; nothing of it is in this repository.
   The license in full is core/muse/LICENSE. The SDK ships no NOTICE file.
   Not covered, and not here: Meta says the SDK's Apache license does not cover its default avatar,
   so neither the character nor the code that draws it is in this repository or in the app.

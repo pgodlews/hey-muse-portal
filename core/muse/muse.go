@@ -147,10 +147,19 @@ type AskInput struct {
 	kind askKind
 	text string
 	wav  []byte
+	// spoken asks Muse for a voice-modality reply, which its TTS stream can then speak.
+	spoken bool
 }
 
 // Text is a typed message.
 func Text(message string) AskInput { return AskInput{kind: askText, text: message} }
+
+// SpokenText is a typed message whose reply Muse is asked to give in voice, so that SpeakReply
+// can fetch Muse's own speech for it.
+func SpokenText(message string) AskInput { return AskInput{kind: askText, text: message, spoken: true} }
+
+// Spoken asks for the reply in voice, so that SpeakReply can fetch Muse's own speech for it.
+func (in AskInput) Spoken() AskInput { in.spoken = true; return in }
 
 // VoiceNote is a spoken message as a WAV file, which Muse transcribes itself.
 func VoiceNote(wav []byte) AskInput { return AskInput{kind: askVoice, wav: wav} }
@@ -167,7 +176,11 @@ type ReplyText struct{ Text string }
 // Settled is the answer once every message in it is complete and Muse has paused. It is almost
 // always the whole answer, a moment before Ask returns to confirm it, so it is the time to start
 // anything slow such as speaking. If Muse does go on, another Settled carries the longer text.
-type Settled struct{ Text string }
+type Settled struct {
+	Text string
+	// MessageIDs are the answer's messages so far, for SpeakReply.
+	MessageIDs []string
+}
 
 func (Heard) replyEvent()     {}
 func (ReplyText) replyEvent() {}
@@ -178,6 +191,8 @@ type Reply struct {
 	Text string
 	// Heard is what Muse made of the voice note, and empty for a typed message.
 	Heard string
+	// MessageIDs are the ids of Muse's messages that make up the answer, in order.
+	MessageIDs []string
 }
 
 // Phase is where the connection stands.
@@ -235,3 +250,6 @@ type Config struct {
 	// TLS replaces the default configuration, which verifies against the system's roots.
 	TLS *tls.Config
 }
+
+// IsSpoken says whether the reply was asked for in voice.
+func (in AskInput) IsSpoken() bool { return in.spoken }

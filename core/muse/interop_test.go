@@ -99,7 +99,7 @@ func TestInteropWithTheSDK(t *testing.T) {
 		{VoiceNote(wav), Reply{Text: "you said: a voice note", Heard: "..."}},
 	} {
 		reply, err := client.Ask(ctx, tc.in, nil)
-		if err != nil || reply != tc.want {
+		if err != nil || reply.Text != tc.want.Text || reply.Heard != tc.want.Heard {
 			t.Fatalf("reply = %+v, %v; want %+v", reply, err, tc.want)
 		}
 		asked.Add(1)

@@ -27,12 +27,34 @@ type activeTurn struct {
 func (a *App) AskVoice(pcm []byte) int {
 	samples := samplesOf(pcm)
 	wav := wavFile(normalize(endpoint.Trim(samples)))
-	return a.ask(muse.VoiceNote(wav))
+	in := muse.VoiceNote(wav)
+	if a.MuseVoice() {
+		in = in.Spoken()
+	}
+	return a.ask(in)
 }
 
 // AskText asks Muse a typed question, the same way as AskVoice.
 func (a *App) AskText(text string) int {
+	if a.MuseVoice() {
+		return a.ask(muse.SpokenText(text))
+	}
 	return a.ask(muse.Text(text))
+}
+
+// SetMuseVoice has answers outside a call spoken in Muse's own voice (OnAnswerAudio) when Muse can
+// give it, rather than only in words (OnAnswer) for the Portal's voice to say.
+func (a *App) SetMuseVoice(on bool) {
+	a.mu.Lock()
+	a.museVoice = on
+	a.mu.Unlock()
+}
+
+// MuseVoice says whether SetMuseVoice is on.
+func (a *App) MuseVoice() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.museVoice
 }
 
 // CancelTurn ends the open turn, if there is one, with nothing more said.
@@ -106,7 +128,7 @@ func (a *App) answer(ctx context.Context, id int, c *muse.Client, in muse.AskInp
 		case muse.Settled:
 			answered = true
 			slog.Info("muse turn answered", "ms", time.Since(start).Milliseconds())
-			a.host.OnAnswer(id, speech.Spoken(e.Text))
+			a.deliver(ctx, id, c, speech.Spoken(e.Text), e.MessageIDs, in.IsSpoken())
 		}
 	})
 	switch {
@@ -121,6 +143,28 @@ func (a *App) answer(ctx context.Context, id int, c *muse.Client, in muse.AskInp
 			a.host.OnTurnEnded(id)
 		}
 	}
+}
+
+// deliver hands the answer over: in Muse's own voice when it was asked for and Muse gives it, and
+// otherwise in words for the Portal's voice.
+func (a *App) deliver(ctx context.Context, id int, c *muse.Client, text string, ids []string, spoken bool) {
+	if spoken && len(ids) > 0 {
+		fetch, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		start := time.Now()
+		_, status, mp3, err := c.SpeakReply(fetch, ids[len(ids)-1])
+		switch {
+		case ctx.Err() != nil:
+			return
+		case err == nil && status/100 == 2 && len(mp3) > 0:
+			slog.Info("muse voice fetched", "ms", time.Since(start).Milliseconds(), "bytes", len(mp3))
+			a.host.OnAnswerAudio(id, text, mp3)
+			return
+		default:
+			slog.Warn("muse voice unavailable, using the Portal's voice", "status", status, "err", err)
+		}
+	}
+	a.host.OnAnswer(id, text)
 }
 
 // excuse is a failure in words to say: a tone alone does not tell somebody whether to say it again,

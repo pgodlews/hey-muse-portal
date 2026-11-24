@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,14 +32,17 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,75 +50,222 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+/**
+ * Sizes for this screen. Everything is drawn for a Portal+ (720 dp on its short side) and scaled
+ * by the screen's short side, so a Portal Go, Portal, Mini or TV gets the same proportions.
+ * [wide] screens (3:2, 16:10, 16:9 landscape) put Muse beside the words; narrow or portrait ones
+ * stack them.
+ */
+class Dims(val k: Float, val wide: Boolean) {
+    fun d(v: Int): Dp = (v * k).dp
+    fun t(v: Int): TextUnit = (v * k).sp
+}
+
+val LocalDims = staticCompositionLocalOf { Dims(1f, true) }
+
+/** Works out [Dims] from the space a screen has. */
+fun dimsFor(width: Dp, height: Dp): Dims {
+    val short = minOf(width, height).value
+    return Dims((short / 720f).coerceIn(0.72f, 1.3f), width.value / height.value >= 1.4f)
+}
+
 @Composable
-fun HomeScreen(state: UiState, avatar: Avatar?, captions: Boolean, wakeWord: Boolean, onSettings: () -> Unit) {
+fun HomeScreen(state: UiState, avatar: Avatar?, myMuse: MyMuseAssets?, captions: Boolean, wakeWord: Boolean, onSettings: () -> Unit) {
+    val talking = state.inCall || state.phase == Phase.SPEAKING ||
+        (state.phase == Phase.THINKING && state.heard.isNotEmpty())
+    val background = if (state.inCall) listOf(Color(0xFF1E2E3A), Night) else listOf(Color(0xFF221B42), Night)
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(Brush.radialGradient(listOf(Color(0xFF1B1636), Night), radius = 1400f))
+            .background(Brush.radialGradient(background, radius = 1600f))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { Assistant.tap() }
     ) {
-        val compact = maxHeight < 560.dp
-        val faceSize = if (compact) maxHeight * 0.36f else maxHeight * 0.42f
-        Column(Modifier.fillMaxSize().padding(horizontal = if (compact) 24.dp else 48.dp, vertical = if (compact) 16.dp else 32.dp)) {
-            TopBar(state, onSettings)
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.fillMaxWidth().height(faceSize), contentAlignment = Alignment.Center) {
-                if (avatar != null) {
-                    val name = when (state.phase) {
-                        Phase.LISTENING -> Avatar.LISTENING
-                        Phase.THINKING -> Avatar.THINKING
-                        Phase.SPEAKING -> Avatar.TALKING
-                        Phase.IDLE -> Avatar.IDLE
+        val dims = dimsFor(maxWidth, maxHeight)
+        val areaH = maxHeight
+        val areaW = maxWidth
+        CompositionLocalProvider(LocalDims provides dims) {
+            val u = dims
+            Column(Modifier.fillMaxSize().padding(horizontal = u.d(48), vertical = u.d(32))) {
+                TopBar(state, onSettings)
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    if (talking && dims.wide) {
+                        // Muse on the left, the conversation on the right.
+                        val face = minOf(areaH * 0.58f, areaW * 0.36f)
+                        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(u.d(40))) {
+                            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                Face(state, avatar, myMuse, face)
+                            }
+                            Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.CenterStart) {
+                                Words(state, captions, center = false)
+                            }
+                        }
+                    } else if (talking) {
+                        val face = minOf(areaH * 0.36f, areaW * 0.62f)
+                        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(u.d(12)))
+                            Face(state, avatar, myMuse, face)
+                            Box(Modifier.fillMaxWidth().weight(1f).padding(top = u.d(16)), contentAlignment = Alignment.Center) {
+                                Words(state, captions, center = true)
+                            }
+                        }
+                    } else {
+                        // Waiting: Muse in the middle, its name and one line on what to do.
+                        val face = minOf(areaH * 0.46f, areaW * 0.62f)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(u.d(20))) {
+                            Face(state, avatar, myMuse, face)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(u.d(6))) {
+                                Text(museName(state), color = Ink, fontSize = u.t(34), fontWeight = FontWeight.SemiBold)
+                                Text(idleHint(state, wakeWord), color = InkSoft, fontSize = u.t(22), textAlign = TextAlign.Center)
+                            }
+                        }
                     }
-                    avatar.Show(name, Modifier.size(faceSize))
-                } else {
-                    Orb(state.phase, state.level, Modifier.size(faceSize))
                 }
+                BottomBar(state)
             }
-            Spacer(Modifier.height(if (compact) 12.dp else 24.dp))
-            Captions(state, captions, compact)
-            Spacer(Modifier.weight(1f))
-            BottomBar(state, wakeWord, compact)
+            state.ringing?.let { Ringing(it) }
         }
-        state.ringing?.let { Ringing(it) }
+    }
+}
+
+private fun museName(state: UiState) = state.status.agentName.ifEmpty { "Muse" }
+
+private fun idleHint(state: UiState, wakeWord: Boolean): String = when (state.phase) {
+    Phase.LISTENING -> "Listening… tap when you're done"
+    Phase.THINKING -> "Thinking…"
+    else -> if (wakeWord && state.wakeReady) "Say “Hey Muse”, or tap to talk" else "Tap to talk"
+}
+
+@Composable
+private fun Face(state: UiState, avatar: Avatar?, myMuse: MyMuseAssets?, size: Dp) {
+    when {
+        myMuse != null -> MyMuse(myMuse, state.phase, state.level, state.inCall, Modifier.size(size),
+            videoCall = state.videoCall, videoWidth = state.videoWidth, videoHeight = state.videoHeight)
+        avatar != null -> {
+            val name = when (state.phase) {
+                Phase.LISTENING -> Avatar.LISTENING
+                Phase.THINKING -> Avatar.THINKING
+                Phase.SPEAKING -> Avatar.TALKING
+                Phase.IDLE -> Avatar.IDLE
+            }
+            avatar.Show(name, Modifier.size(size))
+        }
+        else -> Orb(state.phase, state.level, Modifier.size(size))
+    }
+}
+
+/** What was heard, small, and Muse's words, large. Their box never changes the layout around it. */
+@Composable
+private fun Words(state: UiState, captions: Boolean, center: Boolean) {
+    val u = LocalDims.current
+    val align = if (center) TextAlign.Center else TextAlign.Start
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = if (center) Alignment.CenterHorizontally else Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(u.d(16))) {
+        if (captions && state.heard.isNotEmpty()) {
+            Text("You: “${state.heard}”", color = InkSoft, fontSize = u.t(20), lineHeight = u.t(28), textAlign = align,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        val answer = state.answer
+        when {
+            answer.isNotEmpty() && (captions || state.answerIsProblem) -> {
+                val long = answer.length > 200
+                Text(answer, color = if (state.answerIsProblem) Warning else Ink,
+                    fontSize = if (long) u.t(24) else u.t(30), lineHeight = if (long) u.t(33) else u.t(40),
+                    fontWeight = FontWeight.Medium, textAlign = align, maxLines = if (u.wide) 8 else 6, overflow = TextOverflow.Ellipsis)
+            }
+            state.inCall && state.videoCall -> Text(
+                if (state.phase == Phase.SPEAKING) "${museName(state)} is talking" else "${museName(state)} is listening",
+                color = InkSoft, fontSize = u.t(24), textAlign = align)
+            state.phase == Phase.THINKING -> Text("Thinking…", color = Accent, fontSize = u.t(26), textAlign = align)
+            state.inCall -> Text("Listening…", color = Accent, fontSize = u.t(26), textAlign = align)
+        }
     }
 }
 
 @Composable
 private fun TopBar(state: UiState, onSettings: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text("Hey Muse", color = Accent, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+    val u = LocalDims.current
+    Row(Modifier.fillMaxWidth().height(u.d(80)), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(u.d(14))) {
+        if (state.inCall) CallPill(state) else Clock()
         Spacer(Modifier.weight(1f))
-        StatusChip(state)
-        Spacer(Modifier.size(8.dp))
-        IconButton(onClick = onSettings, modifier = Modifier.size(56.dp)) {
-            Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = InkMuted, modifier = Modifier.size(30.dp))
+        // A problem with the microphone shows here, in a pill of its own: nothing else moves.
+        micWarningShort(state)?.let { Pill(it, Warning, Warning.copy(alpha = 0.14f)) }
+        if (!state.inCall) StatusPill(state)
+        IconButton(onClick = onSettings, modifier = Modifier.size(u.d(56)),
+            colors = IconButtonDefaults.iconButtonColors(containerColor = Glass, contentColor = Ink)) {
+            Icon(Icons.Filled.Settings, contentDescription = "Settings", modifier = Modifier.size(u.d(28)))
         }
     }
 }
 
 @Composable
-fun StatusChip(state: UiState) {
+private fun Clock() {
+    val u = LocalDims.current
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(10_000)
+        }
+    }
+    Column {
+        Text(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(now)), color = Ink, fontSize = u.t(44),
+            fontWeight = FontWeight.Medium, lineHeight = u.t(46))
+        Text(SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(Date(now)), color = InkSoft, fontSize = u.t(18))
+    }
+}
+
+@Composable
+private fun CallPill(state: UiState) {
+    var started by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        started = System.currentTimeMillis()
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val what = if (state.videoCall) "Video call with ${museName(state)}" else "In a call with ${museName(state)}"
+    Pill("$what · ${countdown(now - started + 1000)}", Good, Good.copy(alpha = 0.14f), dot = Good)
+}
+
+@Composable
+fun StatusPill(state: UiState) {
     val (text, color) = statusLine(state)
-    Surface(shape = RoundedCornerShape(50), color = PanelHigh) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.size(8.dp))
-            Text(text, color = Ink, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Pill(text, Ink, Glass, dot = color)
+}
+
+/** The status chip some older screens still use. */
+@Composable
+fun StatusChip(state: UiState) = StatusPill(state)
+
+@Composable
+fun Pill(text: String, ink: Color, fill: Color, dot: Color? = null) {
+    val u = LocalDims.current
+    Surface(shape = RoundedCornerShape(50), color = fill) {
+        Row(Modifier.height(u.d(44)).padding(horizontal = u.d(18)), verticalAlignment = Alignment.CenterVertically) {
+            if (dot != null) {
+                Box(Modifier.size(u.d(10)).clip(CircleShape).background(dot))
+                Spacer(Modifier.size(u.d(10)))
+            }
+            Text(text, color = ink, fontSize = u.t(18), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -122,15 +273,75 @@ fun StatusChip(state: UiState) {
 fun statusLine(state: UiState): Pair<String, Color> {
     val s = state.status
     return when {
-        state.mic == Mic.State.NO_PERMISSION -> "Microphone not allowed" to Warning
-        state.mic == Mic.State.SILENCED -> "Microphone off" to Warning
-        state.mic == Mic.State.FAILED -> "Microphone unavailable" to Warning
         s.pairing -> "Pairing" to Accent
-        s.online -> "Muse · ${s.username}" to Color(0xFF7DE2A6)
+        s.online -> s.agentName.ifEmpty { "Muse" } to Good
         s.phase == heymuse.Heymuse.PhaseConnecting -> "Connecting" to Warning
         s.paired -> "Offline" to Warning
         else -> "Not paired" to InkMuted
     }
+}
+
+@Composable
+private fun BottomBar(state: UiState) {
+    val u = LocalDims.current
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(state.timers.isNotEmpty()) {
+        while (state.timers.isNotEmpty()) {
+            now = System.currentTimeMillis()
+            delay(250)
+        }
+    }
+    // Always the same height, whatever it holds.
+    Row(Modifier.fillMaxWidth().height(u.d(76)), horizontalArrangement = Arrangement.spacedBy(u.d(14), Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically) {
+        when {
+            state.inCall -> {
+                if (!state.videoCall && state.phase == Phase.SPEAKING) {
+                    BigButton("Stop talking", Glass, Ink) { Assistant.interrupt() }
+                }
+                BigButton("End call", Hangup, Color(0xFF2A0E06)) { Assistant.hangUp() }
+            }
+            state.phase == Phase.SPEAKING -> BigButton("Stop", Glass, Ink) { Assistant.tap() }
+            else -> {
+                state.timers.take(3).forEach { t -> Pill("${t.label.ifEmpty { "Timer" }} · ${countdown(t.endMs - now)}", Ink, Glass) }
+                state.alarms.filter { it.on }.minByOrNull { it.nextMs }?.let { a ->
+                    Pill("Alarm ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(a.nextMs))}${if (a.label.isNotEmpty()) " · ${a.label}" else ""}", Ink, Glass)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BigButton(text: String, fill: Color, ink: Color, onClick: () -> Unit) {
+    val u = LocalDims.current
+    Button(onClick = onClick, colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = ink),
+        shape = RoundedCornerShape(50), modifier = Modifier.height(u.d(68)).widthIn(min = u.d(180))) {
+        Text(text, fontSize = u.t(22), fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** The microphone's problem in a few words, for the pill at the top. */
+fun micWarningShort(state: UiState): String? = when (state.mic) {
+    Mic.State.NO_PERMISSION -> "Microphone not allowed"
+    Mic.State.SILENCED -> "Mic muted? Check the privacy switch"
+    Mic.State.FAILED -> "Microphone unavailable"
+    else -> null
+}
+
+fun micWarning(state: UiState): String? = when (state.mic) {
+    Mic.State.NO_PERMISSION -> "Hey Muse needs the microphone. Allow it when asked, or install with adb install -g."
+    Mic.State.SILENCED -> "The microphone hears nothing. Check the privacy switch, or turn off “Hey Portal” in the Portal's settings."
+    Mic.State.FAILED -> "The microphone can't be opened right now. Hey Muse keeps trying."
+    else -> null
+}
+
+fun countdown(ms: Long): String {
+    val s = (ms.coerceAtLeast(0) + 999) / 1000
+    val h = s / 3600
+    val m = s % 3600 / 60
+    val sec = s % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
 }
 
 /** Muse's stand-in face when there is no character: a ring of light that breathes, listens and talks. */
@@ -162,105 +373,19 @@ private fun Orb(phase: Phase, level: Float, modifier: Modifier) {
 }
 
 @Composable
-private fun Captions(state: UiState, captions: Boolean, compact: Boolean) {
-    val label = when (state.phase) {
-        Phase.LISTENING -> "Listening…"
-        Phase.THINKING -> "Thinking…"
-        else -> ""
-    }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        if (label.isNotEmpty()) Text(label, color = Accent, fontSize = if (compact) 18.sp else 22.sp)
-        if (captions && state.heard.isNotEmpty() && state.phase != Phase.LISTENING) {
-            Text("“${state.heard}”", color = InkMuted, fontStyle = FontStyle.Italic, fontSize = if (compact) 18.sp else 22.sp,
-                textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 1100.dp).padding(top = 6.dp))
-        }
-        val show = state.answer.isNotEmpty() && state.phase != Phase.LISTENING && (captions || state.answerIsProblem)
-        if (show) {
-            val long = state.answer.length > 220
-            Text(state.answer, color = if (state.answerIsProblem) Warning else Ink,
-                fontSize = when { compact && long -> 18.sp; compact -> 22.sp; long -> 24.sp; else -> 32.sp },
-                lineHeight = when { compact && long -> 24.sp; compact -> 28.sp; long -> 32.sp; else -> 40.sp },
-                textAlign = TextAlign.Center, maxLines = if (compact) 5 else 7, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 1100.dp).padding(top = 10.dp))
-        }
-    }
-}
-
-@Composable
-private fun BottomBar(state: UiState, wakeWord: Boolean, compact: Boolean) {
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(state.timers.isNotEmpty()) {
-        while (state.timers.isNotEmpty()) {
-            now = System.currentTimeMillis()
-            delay(250)
-        }
-    }
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        val warning = micWarning(state)
-        if (warning != null) {
-            Text(warning, color = Warning, fontSize = 16.sp, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 900.dp))
-            Spacer(Modifier.height(10.dp))
-        }
-        if (state.timers.isNotEmpty() || state.alarms.any { it.on }) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                state.timers.take(3).forEach { t ->
-                    Chip("⏱ ${t.label.ifEmpty { "Timer" }} ${countdown(t.endMs - now)}")
-                }
-                state.alarms.filter { it.on }.minByOrNull { it.nextMs }?.let { a ->
-                    Chip("⏰ ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(a.nextMs))}${if (a.label.isNotEmpty()) " · ${a.label}" else ""}")
-                }
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-        val hint = when (state.phase) {
-            Phase.IDLE -> if (wakeWord && state.wakeReady) "Say “Hey Muse”, or tap anywhere" else "Tap anywhere to talk"
-            Phase.LISTENING -> "Tap when you're done"
-            else -> "Tap to stop"
-        }
-        Text(hint, color = InkMuted, fontSize = 16.sp)
-    }
-}
-
-fun micWarning(state: UiState): String? = when (state.mic) {
-    Mic.State.NO_PERMISSION -> "Hey Muse needs the microphone. Allow it when asked, or install with adb install -g."
-    Mic.State.SILENCED -> "The microphone hears nothing. Check the privacy switch, or turn off “Hey Portal” in the Portal's settings."
-    Mic.State.FAILED -> "The microphone can't be opened right now. Hey Muse keeps trying."
-    else -> null
-}
-
-@Composable
-private fun Chip(text: String) {
-    Surface(shape = RoundedCornerShape(50), color = PanelHigh) {
-        Text(text, color = Ink, fontSize = 16.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-    }
-}
-
-fun countdown(ms: Long): String {
-    val s = (ms.coerceAtLeast(0) + 999) / 1000
-    val h = s / 3600
-    val m = s % 3600 / 60
-    val sec = s % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%d:%02d".format(m, sec)
-}
-
-@Composable
 private fun Ringing(what: String) {
+    val u = LocalDims.current
     Box(
-        Modifier.fillMaxSize().background(Night.copy(alpha = 0.92f))
+        Modifier.fillMaxSize().background(Night.copy(alpha = 0.94f))
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { Assistant.stopRinging() },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(what, color = Ink, fontSize = 44.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(28.dp))
-            Button(
-                onClick = { Assistant.stopRinging() },
-                colors = ButtonDefaults.buttonColors(containerColor = AccentWarm, contentColor = Night),
-                modifier = Modifier.height(72.dp).widthIn(min = 220.dp),
-            ) { Text("Stop", fontSize = 26.sp, fontWeight = FontWeight.SemiBold) }
-            Spacer(Modifier.height(16.dp))
-            Text("or say “Hey Muse”", color = InkMuted, fontSize = 18.sp)
+            Text(what, color = Ink, fontSize = u.t(48), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(u.d(28)))
+            BigButton("Stop", Hangup, Color(0xFF2A0E06)) { Assistant.stopRinging() }
+            Spacer(Modifier.height(u.d(16)))
+            Text("or say “Hey Muse”", color = InkSoft, fontSize = u.t(20))
         }
     }
 }

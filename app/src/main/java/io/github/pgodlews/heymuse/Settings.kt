@@ -44,6 +44,26 @@ class Settings(context: Context) {
         get() = prefs.getString("speech_style", "") ?: ""
         set(v) = prefs.edit().putString("speech_style", v.trim()).apply()
 
+    /** "Hey Muse" starts a live call with Muse, in Muse's own voice, rather than a voice note. */
+    var conversation: Boolean
+        get() = prefs.getBoolean("conversation", true)
+        set(v) = prefs.edit().putBoolean("conversation", v).apply()
+
+    /** Calls are video calls: Muse's avatar talks on screen. Voice-only calls when Muse won't. */
+    var videoCall: Boolean
+        get() = prefs.getBoolean("video_call", true)
+        set(v) = prefs.edit().putBoolean("video_call", v).apply()
+
+    /** Outside a call, answers are spoken in Muse's own voice when Muse gives it. */
+    var museVoice: Boolean
+        get() = prefs.getBoolean("muse_voice", true)
+        set(v) = prefs.edit().putBoolean("muse_voice", v).apply()
+
+    /** Show the owner's own Muse, as the Muse app does, fetched from their Muse. */
+    var myMuse: Boolean
+        get() = prefs.getBoolean("my_muse", true)
+        set(v) = prefs.edit().putBoolean("my_muse", v).apply()
+
     var wakeWord: Boolean
         get() = prefs.getBoolean("wake_word", true)
         set(v) = prefs.edit().putBoolean("wake_word", v).apply()

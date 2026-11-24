@@ -292,6 +292,10 @@ type sessionParams struct {
 	// knockEvery and knocks are the API's word on asking a refusing front door again (vm).
 	knockEvery time.Duration
 	knocks     int
+	// voiceOnly is a connection for a voice call: no control stream and no registration, so it
+	// cannot take the device's place. up is called once its Noise session is established.
+	voiceOnly bool
+	up        func()
 }
 
 // session is one connection to a VM, from the WebSocket upgrade until it drops.
@@ -411,6 +415,9 @@ func (s *session) serve() (outcome, error) {
 		return outcomeClosed, fmt.Errorf("muse: Noise handshake: %w", err)
 	}
 	s.p.log.Info("muse: Noise session established")
+	if s.p.voiceOnly {
+		return s.serveVoiceOnly()
+	}
 
 	id, err := s.open(frame{kind: frameRequest, verb: http.MethodPost, path: controlPath}, nil)
 	if err != nil {
@@ -793,7 +800,11 @@ func (s *session) subscribe() error {
 func (s *session) sendChat(ctx context.Context, in AskInput, ack *request) (int64, error) {
 	open := frame{kind: frameRequest, verb: http.MethodPost, path: chatPath, headers: s.jsonHeaders()}
 	if in.kind == askText {
-		body, err := json.Marshal(chatBody{Message: in.text, OutputModality: "text", DeviceID: s.p.nodeID})
+		modality := "text"
+		if in.spoken {
+			modality = "voice"
+		}
+		body, err := json.Marshal(chatBody{Message: in.text, OutputModality: modality, DeviceID: s.p.nodeID})
 		if err != nil {
 			return 0, err
 		}
@@ -803,7 +814,11 @@ func (s *session) sendChat(ctx context.Context, in AskInput, ack *request) (int6
 
 	// The recording rides as a base64 attachment, the way Meta's voice gadgets send it, with the
 	// body in pieces after a request that carries none.
-	body, err := json.Marshal(chatBody{OutputModality: "text", DeviceID: s.p.nodeID, Items: []chatItem{{
+	modality := "text"
+	if in.spoken {
+		modality = "voice"
+	}
+	body, err := json.Marshal(chatBody{OutputModality: modality, DeviceID: s.p.nodeID, Items: []chatItem{{
 		Type:       "file",
 		MIMEType:   "audio/wav",
 		Filename:   "voice_note.wav",
@@ -941,10 +956,10 @@ func (s *session) ask(ctx context.Context, in AskInput, on func(ReplyEvent)) (Re
 		next := 250 * time.Millisecond
 		switch {
 		case snap.whole && snap.quiet >= s.p.t.final:
-			return Reply{Text: shown, Heard: heard}, nil
+			return Reply{Text: shown, Heard: heard, MessageIDs: s.replyIDs(t)}, nil
 		case snap.whole && snap.quiet >= s.p.t.settle && settled != shown:
 			settled = shown
-			on(Settled{Text: shown})
+			on(Settled{Text: shown, MessageIDs: s.replyIDs(t)})
 			continue
 		case snap.whole && settled != shown:
 			next = s.p.t.settle - snap.quiet
@@ -958,7 +973,7 @@ func (s *session) ask(ctx context.Context, in AskInput, on func(ReplyEvent)) (Re
 			if shown == "" {
 				return Reply{}, errors.New("muse: Muse did not finish replying")
 			}
-			return Reply{Text: shown, Heard: heard}, nil
+			return Reply{Text: shown, Heard: heard, MessageIDs: s.replyIDs(t)}, nil
 		}
 		wait.Reset(next)
 		select {

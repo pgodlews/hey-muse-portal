@@ -38,6 +38,8 @@ type Client struct {
 	state   ConnState
 	session *session
 	running bool
+	// voice is where a voice-only connection goes while the device's session is up (voice.go).
+	voice *voiceTarget
 
 	// The rest belongs to the goroutine in Run.
 
@@ -425,6 +427,7 @@ func (c *Client) serve(ctx context.Context, v vm, st State) (outcome, time.Durat
 	c.log.Info("muse: connecting", "vm", vmID)
 	c.mu.Lock()
 	c.session = s
+	c.voice = &voiceTarget{host: host, vmID: vmID, bearer: v.authToken, nodeID: st.Identity.NodeID()}
 	c.mu.Unlock()
 	out, err := s.run(ctx)
 	if s.knocked > 0 {
@@ -432,6 +435,7 @@ func (c *Client) serve(ctx context.Context, v vm, st State) (outcome, time.Durat
 	}
 	c.mu.Lock()
 	c.session = nil
+	c.voice = nil
 	c.mu.Unlock()
 
 	var lasted time.Duration

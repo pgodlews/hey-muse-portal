@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -111,9 +112,13 @@ class MainActivity : ComponentActivity() {
                         },
                     )
                 } else {
+                    val myMuse = remember(state.avatarVersion, Assistant.settings.myMuse) {
+                        if (Assistant.settings.myMuse) MyMuseAssets.load(java.io.File(filesDir, "avatar")) else null
+                    }
                     HomeScreen(
                         state = state,
                         avatar = avatar,
+                        myMuse = myMuse,
                         captions = Assistant.settings.captions,
                         wakeWord = Assistant.settings.wakeWord,
                         onSettings = {
@@ -181,6 +186,10 @@ class MainActivity : ComponentActivity() {
 
     private fun takeExtras(intent: Intent?) {
         val extras = intent?.extras ?: return
+        if (BuildConfig.DEBUG && extras.containsKey("probe_voice")) {
+            Assistant.probeVoice(call = extras.getBoolean("probe_call", false))
+        }
+        if (BuildConfig.DEBUG && extras.containsKey("sync_avatar")) Assistant.syncAvatar()
         val s = Assistant.settings
         var changed = false
         extras.getString("sdk_token")?.let { s.sdkToken = it; changed = true }
@@ -213,7 +222,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-val Night = Color(0xFF0B0A16)
+val Night = Color(0xFF120F1F)
 val Panel = Color(0xFF17152A)
 val PanelHigh = Color(0xFF221F3B)
 val Edge = Color(0xFF2E2A4D)
@@ -221,4 +230,10 @@ val Accent = Color(0xFFB9A4FF)
 val AccentWarm = Color(0xFFFF9E80)
 val Ink = Color(0xFFF2F0FA)
 val InkMuted = Color(0xFF9D98B8)
+/** Secondary text that still reads from across the room (4.5:1 on Night). */
+val InkSoft = Color(0xFFB9B2D6)
+/** A translucent fill for pills, cards and quiet buttons. */
+val Glass = Color(0x14FFFFFF)
+val Good = Color(0xFF7DE2A6)
+val Hangup = Color(0xFFFF8A6B)
 val Warning = Color(0xFFFFC46B)

@@ -1,9 +1,13 @@
 package io.github.pgodlews.heymuse
 
-import androidx.compose.foundation.BorderStroke
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -11,48 +15,55 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
-import io.github.pgodlews.heymuse.server.SetupServer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.sp
 import heymuse.Heymuse
+import io.github.pgodlews.heymuse.server.SetupServer
 
+private enum class Page { MAIN, ADVANCED, ABOUT }
+
+/**
+ * Settings, in plain words and big rows: the few things people change day to day on the first page,
+ * and everything technical (pairing, the token, cloud voices, the Portal's own switches) on Advanced.
+ */
 @Composable
 fun SettingsScreen(
     state: UiState,
@@ -70,289 +81,436 @@ fun SettingsScreen(
         version++
         Assistant.settingsChanged(micChanged = mic)
     }
+    var page by remember { mutableStateOf(Page.MAIN) }
+    BackHandler(enabled = page != Page.MAIN) { page = Page.MAIN }
 
     val context = LocalContext.current
-    var showQrSetup by remember { mutableStateOf(false) }
     var setupServer by remember { mutableStateOf<SetupServer?>(null) }
-
-    fun startQrSetup() {
-        val server = SetupServer(context, settings) {
-            changed(false)
-        }
-        if (server.start()) {
-            setupServer = server
-            showQrSetup = true
-        }
+    fun phoneSetup() {
+        val server = SetupServer(context, settings) { changed(false) }
+        if (server.start()) setupServer = server
+    }
+    setupServer?.let { server ->
+        QrCodeDialog(server = server, onDismiss = { server.stop(); setupServer = null })
     }
 
-    fun stopQrSetup() {
-        showQrSetup = false
-        setupServer?.stop()
-        setupServer = null
+    BoxWithConstraints(Modifier.fillMaxSize().background(Night)) {
+        val dims = dimsFor(maxWidth, maxHeight)
+        val twoColumns = maxWidth.value >= 820f
+        CompositionLocalProvider(LocalDims provides dims) {
+            val u = dims
+            Column(Modifier.fillMaxSize().padding(horizontal = u.d(40), vertical = u.d(24))) {
+                Header(
+                    title = when (page) { Page.MAIN -> "Settings"; Page.ADVANCED -> "Advanced"; Page.ABOUT -> "About" },
+                    state = state,
+                    onBack = { if (page == Page.MAIN) onClose() else page = Page.MAIN },
+                )
+                Spacer(Modifier.height(u.d(18)))
+                Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
+                    key(version) {
+                        when (page) {
+                            Page.MAIN -> MainPage(state, settings, twoColumns, ::changed, onKeepScreenOn,
+                                openAdvanced = { page = Page.ADVANCED }, openAbout = { page = Page.ABOUT })
+                            Page.ADVANCED -> AdvancedPage(state, settings, twoColumns, canOverlay, onAllowOverlay, onKeepScreenOn, ::changed, ::phoneSetup)
+                            Page.ABOUT -> AboutPage(avatarLoaded, avatarPath)
+                        }
+                    }
+                    Spacer(Modifier.height(u.d(24)))
+                }
+            }
+        }
     }
+}
 
-    if (showQrSetup && setupServer != null) {
-        QrCodeDialog(
-            server = setupServer!!,
-            onDismiss = ::stopQrSetup
+@Composable
+private fun Header(title: String, state: UiState, onBack: () -> Unit) {
+    val u = LocalDims.current
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(u.d(16))) {
+        IconButton(onClick = onBack, modifier = Modifier.size(u.d(56)),
+            colors = IconButtonDefaults.iconButtonColors(containerColor = Glass, contentColor = Ink)) {
+            @Suppress("DEPRECATION")
+            Icon(Icons.Filled.ArrowBack, contentDescription = "Back", modifier = Modifier.size(u.d(28)))
+        }
+        Text(title, color = Ink, fontSize = u.t(34), fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.weight(1f))
+        val s = state.status
+        when {
+            s.online -> Pill("Connected to ${s.agentName.ifEmpty { "Muse" }}", Good, Good.copy(alpha = 0.12f), dot = Good)
+            else -> StatusPill(state)
+        }
+    }
+}
+
+// ---- Building blocks ----
+
+/** Two columns on a wide screen, one on a narrow one. */
+@Composable
+private fun Columns(two: Boolean, left: @Composable ColumnScope.() -> Unit, right: @Composable ColumnScope.() -> Unit) {
+    val u = LocalDims.current
+    if (two) {
+        Row(horizontalArrangement = Arrangement.spacedBy(u.d(20))) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(u.d(10)), content = left)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(u.d(10)), content = right)
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(u.d(10))) {
+            left()
+            Spacer(Modifier.height(u.d(10)))
+            right()
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String, top: Boolean = false) {
+    val u = LocalDims.current
+    Text(text.uppercase(), color = Accent, fontSize = u.t(17), fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+        modifier = Modifier.padding(start = u.d(8), top = if (top) u.d(12) else u.d(0)))
+}
+
+/** A rounded card of rows, with a hairline between them. */
+@Composable
+private fun Card(rows: List<@Composable () -> Unit>) {
+    val u = LocalDims.current
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(u.d(24))).background(Glass)) {
+        rows.forEachIndexed { i, row ->
+            if (i > 0) HorizontalDivider(color = Color.White.copy(alpha = 0.07f))
+            row()
+        }
+    }
+}
+
+@Composable
+private fun Row(title: String, detail: String? = null, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
+    val u = LocalDims.current
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = u.d(76)).let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = u.d(24), vertical = u.d(10)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(u.d(16)),
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(u.d(3))) {
+            Text(title, color = Ink, fontSize = u.t(22), fontWeight = FontWeight.Medium)
+            if (detail != null) Text(detail, color = InkSoft, fontSize = u.t(17))
+        }
+        trailing()
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, detail: String? = null, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val u = LocalDims.current
+    Row(title, detail, onClick = { onChange(!checked) }) {
+        Switch(
+            checked = checked, onCheckedChange = onChange, modifier = Modifier.scale(u.k * 1.15f),
+            colors = SwitchDefaults.colors(checkedTrackColor = Accent, checkedThumbColor = Color.White,
+                uncheckedTrackColor = Color.White.copy(alpha = 0.16f), uncheckedThumbColor = Color.White, uncheckedBorderColor = Color.Transparent),
         )
     }
+}
 
-    Column(Modifier.fillMaxSize().background(Night)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose, modifier = Modifier.size(56.dp)) {
-                @Suppress("DEPRECATION")
-                Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Ink, modifier = Modifier.size(30.dp))
-            }
-            Text("Settings", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.weight(1f))
-            Button(
-                onClick = ::startQrSetup,
-                colors = ButtonDefaults.buttonColors(containerColor = PanelHigh, contentColor = Accent),
-                modifier = Modifier.padding(end = 8.dp)
+/** A choice of a few, side by side. */
+@Composable
+private fun Segmented(options: List<String>, selected: Int, onPick: (Int) -> Unit) {
+    val u = LocalDims.current
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(u.d(22))).background(Color.White.copy(alpha = 0.08f)).padding(u.d(4)),
+        horizontalArrangement = Arrangement.spacedBy(u.d(4))) {
+        options.forEachIndexed { i, label ->
+            val on = i == selected
+            Box(
+                Modifier.weight(1f).height(u.d(48)).clip(RoundedCornerShape(u.d(18)))
+                    .background(if (on) Accent else Color.Transparent).clickable { onPick(i) },
+                contentAlignment = Alignment.Center,
             ) {
-                Text("📱 Phone Setup")
+                Text(label, color = if (on) Color(0xFF1A1330) else Ink, fontSize = u.t(19), fontWeight = FontWeight.Medium)
             }
-            StatusChip(state)
-        }
-        Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 32.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            key(version) {
-                MuseCard(state, settings, ::changed, ::startQrSetup)
-                VoiceCard(settings, ::changed)
-                ListeningCard(settings, canOverlay, onAllowOverlay, ::changed)
-                ScreenCard(settings, avatarLoaded, avatarPath, onKeepScreenOn, ::changed)
-            }
-            ClockCard(state)
-            AboutCard()
-            Spacer(Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Panel),
-        border = BorderStroke(1.dp, Edge),
-    ) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(title, color = Accent, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            content()
-        }
+private fun ChoiceBlock(title: String, detail: String? = null, content: @Composable () -> Unit) {
+    val u = LocalDims.current
+    Column(Modifier.fillMaxWidth().padding(horizontal = u.d(24), vertical = u.d(16)), verticalArrangement = Arrangement.spacedBy(u.d(10))) {
+        Text(title, color = Ink, fontSize = u.t(22), fontWeight = FontWeight.Medium)
+        if (detail != null) Text(detail, color = InkSoft, fontSize = u.t(17))
+        content()
     }
 }
 
 @Composable
-private fun Note(text: String) = Text(text, color = InkMuted, fontSize = 15.sp, lineHeight = 21.sp)
-
-@Composable
-private fun Toggle(label: String, detail: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(label, color = Ink, fontSize = 17.sp)
-            if (detail != null) Note(detail)
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
+private fun SmallButton(text: String, fill: Color = Color.White.copy(alpha = 0.10f), ink: Color = Ink, enabled: Boolean = true, onClick: () -> Unit) {
+    val u = LocalDims.current
+    Button(onClick = onClick, enabled = enabled, shape = RoundedCornerShape(50),
+        colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = ink),
+        modifier = Modifier.height(u.d(52))) {
+        Text(text, fontSize = u.t(18), fontWeight = FontWeight.Medium)
     }
 }
 
 /** A text setting with its own Save button, so half-typed values are never used. */
 @Composable
 private fun Field(label: String, value: String, secret: Boolean = false, placeholder: String = "", onSave: (String) -> Unit) {
+    val u = LocalDims.current
     var text by remember(value) { mutableStateOf(value) }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = u.d(24), vertical = u.d(10)), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(u.d(12))) {
         OutlinedTextField(
-            value = text,
-            onValueChange = { text = it },
-            label = { Text(label) },
+            value = text, onValueChange = { text = it }, singleLine = true,
+            label = { Text(label, fontSize = u.t(16)) },
             placeholder = { if (placeholder.isNotEmpty()) Text(placeholder) },
-            singleLine = true,
-            visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = u.t(19), color = Ink),
+            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = if (secret) KeyboardType.Password else KeyboardType.Text),
             modifier = Modifier.weight(1f),
         )
-        Button(onClick = { onSave(text) }, enabled = text != value) { Text("Save") }
+        SmallButton("Save", enabled = text != value) { onSave(text) }
     }
 }
 
 @Composable
-private fun MuseCard(state: UiState, settings: Settings, changed: (Boolean) -> Unit, onOpenQrSetup: () -> Unit) {
-    val s = state.status
-    Section("Muse") {
-        Text(
-            when {
-                s.online -> "Connected to Muse as ${s.username}."
-                s.pairing -> "Pairing with the Muse app."
-                s.paired && s.error.isNotEmpty() -> "Paired as ${s.username}, but not connected: ${s.error}"
-                s.paired -> "Paired as ${s.username}, connecting."
-                else -> "Not paired with Muse yet."
-            },
-            color = Ink, fontSize = 17.sp,
-        )
-        OutlinedButton(
-            onClick = onOpenQrSetup,
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent),
-            border = BorderStroke(1.dp, Accent.copy(alpha = 0.5f))
-        ) {
-            Text("📱 Configure from Phone (Scan QR)", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        }
-        Field("Muse SDK token", settings.sdkToken, secret = true, placeholder = "mgst_…") {
-            settings.sdkToken = it
-            changed(false)
-        }
-        Note("Your own token from gadgets.muse.ai (Account → SDK tokens). It is personal: never share or publish it. " +
-            "Scan the QR code above to easily paste it from your phone, or hand it over via adb.")
-
-        if (s.pairing) {
-            PairingPanel(s)
-        } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = { Assistant.startPairing() }, enabled = settings.sdkToken.isNotEmpty()) {
-                    Text(if (s.paired) "Pair again" else "Pair with the Muse app")
-                }
-                if (s.paired) OutlinedButton(onClick = { Assistant.unpair() }) { Text("Unpair") }
-            }
-            if (s.pairingFailed && !s.paired) Text("The last pairing failed: ${s.pairingReason.ifEmpty { s.pairingError }}", color = Warning, fontSize = 15.sp)
-            if (s.pairingDone && s.paired && !s.online) Note("Paired. Connecting to Muse…")
-        }
-        if (state.problem.isNotEmpty()) Text(state.problem, color = Warning, fontSize = 15.sp)
-        Field("Name in the Muse app", settings.displayName) {
-            settings.displayName = it
-            changed(false)
-        }
+private fun LinkCard(title: String, detail: String?, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val u = LocalDims.current
+    Row(
+        modifier.heightIn(min = u.d(72)).clip(RoundedCornerShape(u.d(20))).background(Glass).clickable(onClick = onClick)
+            .padding(horizontal = u.d(24)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, color = Ink, fontSize = u.t(21), fontWeight = FontWeight.Medium)
+        Spacer(Modifier.weight(1f))
+        if (detail != null) Text(detail, color = InkSoft, fontSize = u.t(17), modifier = Modifier.padding(end = u.d(8)))
+        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = null, tint = InkSoft, modifier = Modifier.size(u.d(28)))
     }
+}
+
+// ---- The first page ----
+
+@Composable
+private fun MainPage(state: UiState, settings: Settings, two: Boolean, changed: (Boolean) -> Unit, onKeepScreenOn: () -> Unit,
+                     openAdvanced: () -> Unit, openAbout: () -> Unit) {
+    val u = LocalDims.current
+    if (state.status.pairing) {
+        PairingPanel(state.status)
+        Spacer(Modifier.height(u.d(20)))
+    } else if (!state.status.paired && !state.status.online) {
+        LinkCard("Set up Muse", "Pair this Portal with the Muse app", openAdvanced, Modifier.fillMaxWidth())
+        Spacer(Modifier.height(u.d(20)))
+    }
+    Columns(two,
+        left = {
+            SectionTitle("Talking")
+            val voice = when {
+                settings.museVoice -> 0
+                settings.voice == Settings.BUILT_IN || settings.speechKey.isEmpty() -> 1
+                else -> 2
+            }
+            Card(listOf(
+                { ToggleRow("Video calls", "See Muse talk, as in the app", settings.videoCall) { settings.videoCall = it; changed(false) } },
+                { ToggleRow("Live conversation", "Talk back and forth", settings.conversation) { settings.conversation = it; changed(false) } },
+                {
+                    ChoiceBlock("Voice", "When Muse answers one question at a time") {
+                        Segmented(listOf("Muse", "Portal", "Cloud…"), voice) { i ->
+                            when (i) {
+                                0 -> settings.museVoice = true
+                                1 -> { settings.museVoice = false; settings.voice = Settings.BUILT_IN }
+                                else -> {
+                                    settings.museVoice = false
+                                    if (settings.speechKey.isEmpty()) openAdvanced()
+                                    else if (settings.voice == Settings.BUILT_IN) settings.voice = Heymuse.cloudVoices().split(",").first()
+                                }
+                            }
+                            changed(false)
+                        }
+                    }
+                },
+            ))
+        },
+        right = {
+            SectionTitle("Listening")
+            val levels = listOf(0.3f, 0.5f, 0.7f)
+            val level = levels.indices.minBy { kotlin.math.abs(levels[it] - settings.sensitivity) }
+            Card(listOf(
+                { ToggleRow("“Hey Muse”", "Wake word, heard on this Portal", settings.wakeWord) { settings.wakeWord = it; changed(false) } },
+                {
+                    ChoiceBlock("How easily it wakes") {
+                        Segmented(listOf("Less", "Normal", "More"), level) { i -> settings.sensitivity = levels[i]; changed(false) }
+                    }
+                },
+            ))
+            SectionTitle("Screen", top = true)
+            Card(listOf(
+                {
+                    ToggleRow("Show my Muse", null, settings.myMuse) {
+                        settings.myMuse = it; changed(false)
+                        if (it) Assistant.syncAvatar()
+                    }
+                },
+                { ToggleRow("Captions", "Write what’s said as well", settings.captions) { settings.captions = it; changed(false) } },
+                { ToggleRow("Keep the screen on", null, settings.keepScreenOn) { settings.keepScreenOn = it; changed(false); onKeepScreenOn() } },
+            ))
+        },
+    )
+    TimersAndAlarms(state)
+    Spacer(Modifier.height(u.d(20)))
+    Row(horizontalArrangement = Arrangement.spacedBy(u.d(16))) {
+        LinkCard("Advanced", "Pairing, token, voices", openAdvanced, Modifier.weight(2f))
+        LinkCard("About", null, openAbout, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun TimersAndAlarms(state: UiState) {
+    val u = LocalDims.current
+    if (state.timers.isEmpty() && state.alarms.isEmpty()) return
+    Spacer(Modifier.height(u.d(16)))
+    SectionTitle("Timers and alarms")
+    Spacer(Modifier.height(u.d(10)))
+    Card(
+        state.timers.map { t ->
+            @Composable {
+                Row("${t.label.ifEmpty { "Timer" }} · ${countdown(t.endMs - System.currentTimeMillis())}") {
+                    SmallButton("Cancel") { Assistant.cancelTimer(t.id) }
+                }
+            }
+        } + state.alarms.map { a ->
+            @Composable {
+                Row("%02d:%02d".format(a.hour, a.minute), listOf(a.days, a.label, if (a.on) "" else "off").filter { it.isNotEmpty() }.joinToString(" · ")) {
+                    SmallButton("Delete") { Assistant.deleteAlarm(a.id) }
+                }
+            }
+        }
+    )
+}
+
+// ---- Advanced ----
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdvancedPage(state: UiState, settings: Settings, two: Boolean, canOverlay: Boolean, onAllowOverlay: () -> Unit,
+                         onKeepScreenOn: () -> Unit, changed: (Boolean) -> Unit, phoneSetup: () -> Unit) {
+    val u = LocalDims.current
+    val s = state.status
+    if (s.pairing) {
+        PairingPanel(s)
+        Spacer(Modifier.height(u.d(20)))
+    }
+    Columns(two,
+        left = {
+            SectionTitle("Muse")
+            val token = settings.sdkToken
+            Card(listOfNotNull(
+                {
+                    Row(
+                        when {
+                            s.online -> "Paired as “${s.agentName.ifEmpty { "Muse" }}”"
+                            s.paired -> "Paired, ${if (s.error.isNotEmpty()) "not connected" else "connecting"}"
+                            else -> "Not paired yet"
+                        },
+                        if (s.paired && s.error.isNotEmpty()) s.error else s.bleName.ifEmpty { null },
+                    ) {
+                        if (!s.pairing) SmallButton(if (s.paired) "Pair again" else "Pair", enabled = token.isNotEmpty()) { Assistant.startPairing() }
+                    }
+                },
+                {
+                    Row("SDK token", if (token.isEmpty()) "Not set · from gadgets.muse.ai" else "Saved") {
+                        SmallButton("Set from phone", onClick = phoneSetup)
+                    }
+                },
+                { Field("Or type the token", token, secret = true, placeholder = "mgst_…") { settings.sdkToken = it; changed(false) } },
+                { Field("Name in the Muse app", settings.displayName) { settings.displayName = it; changed(false) } },
+                if (s.paired) {
+                    {
+                        Row("Forget this Portal", "Remove it in the Muse app too") {
+                            SmallButton("Unpair", fill = Hangup.copy(alpha = 0.16f), ink = Color(0xFFFFB59E)) { Assistant.unpair() }
+                        }
+                    }
+                } else null,
+            ))
+            if (s.pairingFailed && !s.paired) Text("The last pairing failed: ${s.pairingReason.ifEmpty { s.pairingError }}", color = Warning, fontSize = u.t(17))
+            if (state.problem.isNotEmpty()) Text(state.problem, color = Warning, fontSize = u.t(17))
+
+            SectionTitle("Cloud voice", top = true)
+            Card(listOf(
+                {
+                    ChoiceBlock("OpenAI-style speech", "Used only when Muse’s own voice isn’t available. The answer’s words go to that service.") {
+                        val voices = Heymuse.cloudVoices().split(",").filter { it.isNotBlank() }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(u.d(8)), verticalArrangement = Arrangement.spacedBy(u.d(8))) {
+                            voices.forEach { v ->
+                                val on = settings.voice == v
+                                Box(
+                                    Modifier.height(u.d(44)).clip(RoundedCornerShape(50))
+                                        .background(if (on) Accent else Color.White.copy(alpha = 0.08f))
+                                        .clickable(enabled = settings.speechKey.isNotEmpty()) { settings.voice = v; changed(false) }
+                                        .padding(horizontal = u.d(16)),
+                                    contentAlignment = Alignment.Center,
+                                ) { Text(v, color = if (on) Color(0xFF1A1330) else Ink, fontSize = u.t(17)) }
+                            }
+                        }
+                    }
+                },
+                { Field("Speech key", settings.speechKey, secret = true, placeholder = "sk-…") { settings.speechKey = it; changed(false) } },
+                { Field("How to say it", settings.speechStyle, placeholder = "warmly, and not too fast") { settings.speechStyle = it; changed(false) } },
+                { Field("Endpoint", settings.speechBase, placeholder = "https://api.openai.com/v1") { settings.speechBase = it; changed(false) } },
+                { Field("Model", settings.speechModel, placeholder = "gpt-4o-mini-tts") { settings.speechModel = it; changed(false) } },
+                { Row("Hear the voice") { SmallButton("Play") { Assistant.testVoice() } } },
+            ))
+        },
+        right = {
+            SectionTitle("This Portal")
+            Card(listOfNotNull(
+                { ToggleRow("Start with the Portal", null, settings.startOnBoot) { settings.startOnBoot = it; changed(false) } },
+                { ToggleRow("Come forward on “Hey Muse”", "From behind other apps", settings.openOnWake) { settings.openOnWake = it; changed(false) } },
+                if (settings.openOnWake && !canOverlay) {
+                    { Row("Needs “Display over other apps”") { SmallButton("Allow", onClick = onAllowOverlay) } }
+                } else null,
+                { ToggleRow("Portal voice processing", "Echo and noise cancelling", settings.voiceProcessing) { settings.voiceProcessing = it; changed(true) } },
+                { ToggleRow("Muse’s own voice", "For one-question answers", settings.museVoice) { settings.museVoice = it; changed(false) } },
+            ))
+            Column(Modifier.fillMaxWidth().padding(top = u.d(10)).clip(RoundedCornerShape(u.d(24))).background(Glass).padding(u.d(24)),
+                verticalArrangement = Arrangement.spacedBy(u.d(6))) {
+                Text("Tip", color = Ink, fontSize = u.t(21), fontWeight = FontWeight.Medium)
+                Text("Turn off “Hey Portal” and Alexa in the Portal’s own settings, so the microphone is Hey Muse’s alone.",
+                    color = InkSoft, fontSize = u.t(17), lineHeight = u.t(24))
+            }
+        },
+    )
 }
 
 @Composable
 private fun PairingPanel(s: MuseStatus) {
+    val u = LocalDims.current
     Column(
-        Modifier.fillMaxWidth().background(PanelHigh, RoundedCornerShape(12.dp)).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(u.d(24))).background(Accent.copy(alpha = 0.12f)).padding(u.d(28)),
+        verticalArrangement = Arrangement.spacedBy(u.d(10)),
     ) {
-        Text("This Portal is on Bluetooth as", color = InkMuted, fontSize = 15.sp)
-        Text(s.bleName, color = Ink, fontSize = 28.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-        Text("On your phone, in the Muse app:", color = Ink, fontSize = 16.sp)
-        Note("1. Settings → Devices, turn on Developer mode.\n" +
-            "2. Tap Add Device (+) and pick ${s.bleName}.\n" +
-            "3. Muse warns that it is a community device: continue if this Portal is yours.\n" +
-            "4. When asked for Wi-Fi, pick the one network shown. No password is needed.")
-        Text("Now: ${s.pairingState}${if (s.pairingReason.isNotEmpty()) " (${s.pairingReason})" else ""}", color = Accent, fontSize = 16.sp)
-        Note("Pairing stays open for ${Heymuse.PairingWindowSeconds / 60} minutes. It keeps setup secret from anyone listening, " +
-            "but cannot prove who the phone is, so pair on a network you trust.")
-        OutlinedButton(onClick = { Assistant.cancelPairing() }) { Text("Stop pairing") }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun VoiceCard(settings: Settings, changed: (Boolean) -> Unit) {
-    Section("Voice") {
-        Note("Muse answers in words, and the Portal says them: in its built-in voice, or in a cloud voice " +
-            "if you give an OpenAI-style speech key. With a cloud voice the answer's text goes to that service.")
-        val voices = listOf(Settings.BUILT_IN) + Heymuse.cloudVoices().split(",").filter { it.isNotBlank() }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            voices.forEach { v ->
-                val needsKey = v != Settings.BUILT_IN && settings.speechKey.isEmpty()
-                FilterChip(
-                    selected = settings.voice == v,
-                    onClick = { settings.voice = v; changed(false) },
-                    label = { Text(if (v == Settings.BUILT_IN) "Built in" else v) },
-                    enabled = !needsKey,
-                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Accent.copy(alpha = 0.25f)),
-                )
-            }
-        }
-        Field("Speech key", settings.speechKey, secret = true, placeholder = "sk-…") { settings.speechKey = it; changed(false) }
-        Field("How to say it", settings.speechStyle, placeholder = "warmly, and not too fast") { settings.speechStyle = it; changed(false) }
-        Field("Speech endpoint", settings.speechBase, placeholder = "https://api.openai.com/v1") { settings.speechBase = it; changed(false) }
-        Field("Speech model", settings.speechModel, placeholder = "gpt-4o-mini-tts") { settings.speechModel = it; changed(false) }
-        Button(onClick = { Assistant.testVoice() }) { Text("Hear it") }
-    }
-}
-
-@Composable
-private fun ListeningCard(settings: Settings, canOverlay: Boolean, onAllowOverlay: () -> Unit, changed: (Boolean) -> Unit) {
-    Section("Listening") {
-        Toggle("Listen for “Hey Muse”", "The wake word is heard on the Portal. Nothing is sent until it is, or you tap.", settings.wakeWord) {
-            settings.wakeWord = it; changed(false)
-        }
-        var sensitivity by remember { mutableFloatStateOf(settings.sensitivity) }
-        Text("Sensitivity", color = Ink, fontSize = 17.sp)
-        Slider(
-            value = sensitivity,
-            onValueChange = { sensitivity = it },
-            onValueChangeFinished = { settings.sensitivity = sensitivity; changed(false) },
-            enabled = settings.wakeWord,
-        )
-        Note("Higher wakes more readily, and falsely more often. The middle is what the model was tuned for.")
-        Toggle("Portal voice processing", "The Portal's own beamforming, noise suppression and echo cancellation. " +
-            "Turn off if the wake word is missed.", settings.voiceProcessing) {
-            settings.voiceProcessing = it; changed(true)
-        }
-        Toggle("Open on the wake word", "Bring Hey Muse to the front when it hears “Hey Muse” in the background.", settings.openOnWake) {
-            settings.openOnWake = it; changed(false)
-        }
-        if (settings.openOnWake && !canOverlay) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Needs “Display over other apps”.", color = Warning, fontSize = 15.sp, modifier = Modifier.weight(1f))
-                Button(onClick = onAllowOverlay) { Text("Allow") }
-            }
-        }
-        Toggle("Start when the Portal starts", null, settings.startOnBoot) { settings.startOnBoot = it; changed(false) }
-        Note("For the microphone to be Hey Muse's alone, turn off “Hey Portal” and Alexa in the Portal's own settings. " +
-            "While Portal's assistant talks, other apps hear silence.")
-    }
-}
-
-@Composable
-private fun ScreenCard(settings: Settings, avatarLoaded: Boolean, avatarPath: String, onKeepScreenOn: () -> Unit, changed: (Boolean) -> Unit) {
-    Section("Screen") {
-        Toggle("Show what was said", "Write the question and the answer on the screen as well as speaking them.", settings.captions) {
-            settings.captions = it; changed(false)
-        }
-        Toggle("Keep the screen on", "While Hey Muse is in front.", settings.keepScreenOn) {
-            settings.keepScreenOn = it; changed(false); onKeepScreenOn()
-        }
-        Text(if (avatarLoaded) "The Muse character is installed." else "No Muse character installed.", color = Ink, fontSize = 17.sp)
-        Note("The character is Meta's and is not in this app. Make it from your own copy of Meta's SDK with " +
-            "tools/muse-avatar, then copy the muse-avatar folder to $avatarPath with adb push.")
-    }
-}
-
-@Composable
-private fun ClockCard(state: UiState) {
-    if (state.timers.isEmpty() && state.alarms.isEmpty()) return
-    Section("Timers and alarms") {
-        Note("Ask Muse to set them, like “set a timer for ten minutes” or “wake me at 7”.")
-        state.timers.forEach { t ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Timer ${t.label}".trim() + " · " + countdown(t.endMs - System.currentTimeMillis()), color = Ink, fontSize = 17.sp, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = { Assistant.cancelTimer(t.id) }) { Text("Cancel") }
-            }
-        }
-        state.alarms.forEach { a ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("%02d:%02d · %s%s%s".format(a.hour, a.minute, a.days, if (a.label.isNotEmpty()) " · ${a.label}" else "", if (a.on) "" else " · off"),
-                    color = Ink, fontSize = 17.sp, modifier = Modifier.weight(1f))
-                OutlinedButton(onClick = { Assistant.deleteAlarm(a.id) }) { Text("Delete") }
-            }
+        Text("This Portal is on Bluetooth as", color = InkSoft, fontSize = u.t(19))
+        Text(s.bleName, color = Ink, fontSize = u.t(40), fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+        Text("In the Muse app: Settings → Devices, turn on Developer mode, tap + and pick ${s.bleName}. " +
+            "Continue past the community-device warning, and pick the one Wi-Fi network shown.",
+            color = Ink, fontSize = u.t(19), lineHeight = u.t(27))
+        Text("Now: ${s.pairingState}${if (s.pairingReason.isNotEmpty()) " (${s.pairingReason})" else ""} · " +
+            "open for ${Heymuse.PairingWindowSeconds / 60} minutes", color = Accent, fontSize = u.t(18))
+        Row(horizontalArrangement = Arrangement.spacedBy(u.d(12))) {
+            SmallButton("Stop pairing") { Assistant.cancelPairing() }
         }
     }
 }
 
+// ---- About ----
+
 @Composable
-private fun AboutCard() {
-    Section("About") {
-        Text("Hey Muse ${BuildConfig.VERSION_NAME}", color = Ink, fontSize = 17.sp)
-        Note("A hobby project, not made or endorsed by Meta. Muse is Meta's, and using it this way is covered by Meta's Gadget SDK Terms. " +
-            "After the wake word, what you say goes to your Muse as a recording, kept on the message in your Muse account. " +
-            "Anyone who speaks to the Portal is recorded into your account the same way.")
+private fun AboutPage(avatarLoaded: Boolean, avatarPath: String) {
+    val u = LocalDims.current
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(u.d(24))).background(Glass).padding(u.d(28)),
+        verticalArrangement = Arrangement.spacedBy(u.d(14))) {
+        Text("Hey Muse ${BuildConfig.VERSION_NAME}", color = Ink, fontSize = u.t(26), fontWeight = FontWeight.SemiBold)
+        Text("A hobby project, not made or endorsed by Meta. Muse is Meta’s, and using it this way is covered by Meta’s Gadget SDK Terms.",
+            color = InkSoft, fontSize = u.t(19), lineHeight = u.t(27))
+        Text("After “Hey Muse”, what you say goes to your Muse and is kept in your Muse account. Anyone who speaks to the Portal is " +
+            "recorded into your account the same way. In a call, Muse hears the room until the call ends.",
+            color = InkSoft, fontSize = u.t(19), lineHeight = u.t(27))
+        Text(if (avatarLoaded) "A Muse character from your own copy of Meta’s SDK is installed."
+            else "Optional: a character made from your own copy of Meta’s SDK (tools/muse-avatar), pushed to $avatarPath.",
+            color = InkMuted, fontSize = u.t(16), lineHeight = u.t(23))
     }
 }

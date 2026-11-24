@@ -25,6 +25,9 @@ flowchart LR
 core/                       Go module github.com/pgodlews/hey-muse-portal/core
   heymuse/                  the gomobile API: App, Host, Peripheral, Ears, Speech (Java package `heymuse`)
   muse/, muse/pairing/      hey-muse's port of Meta's Muse Gadget SDK client and BLE setup (Apache-2.0)
+  muse/call.go              realtime voice calls (/voice/realtime) on a voice-only Noise connection
+  muse/videocall.go, rtc/   video calls: JOIN, ICE-lite, SRTP, RTP/H.264; Opus is the app's (MediaCodec)
+  muse/voice.go, files.go   Muse's own TTS for a reply; /identity and /fs/raw for the owner's avatar
   device/                   timers, alarms, volume, stop: what Muse may call ("portal.*" commands)
   wake/                     the "Hey Muse" microWakeWord model, embedded, run by zserge/microwakeword
   endpoint/                 when the speaker has finished (TECHO5's, unchanged)
@@ -37,6 +40,8 @@ app/src/main/java/io/github/pgodlews/heymuse/
   BlePeripheral.kt          the Muse setup GATT service (heymuse.Peripheral)
   Sound.kt                  clips (chime, ring), the media-stream volume
   Avatar.kt                 Muse's character from owner-made sprite sheets
+  MyMuse.kt                 the owner's own avatar clips, and Muse's live picture in a video call
+  CallPlayer.kt, CallMedia.kt   call playback (half duplex), Opus and H.264 on MediaCodec
   MainActivity.kt, HomeScreen.kt, SettingsScreen.kt   the screen
   MuseService.kt, BootReceiver.kt                     background listening, start on boot
 scripts/build-core.sh       gomobile bind → app/libs/heymuse-core.aar (Gradle's preBuild runs it)

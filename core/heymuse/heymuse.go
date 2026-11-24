@@ -35,12 +35,38 @@ type Host interface {
 	OnHeard(turn int, text string)
 	// OnAnswer is Muse's answer to turn, tidied for a voice. It is the turn's last event.
 	OnAnswer(turn int, text string)
+	// OnAnswerAudio is Muse's answer to turn in Muse's own voice, as MP3, with its words. It comes
+	// instead of OnAnswer when SetMuseVoice is on and Muse's speech could be fetched.
+	OnAnswerAudio(turn int, text string, mp3 []byte)
 	// OnTurnFailed is why turn got no answer, in words to say. It is the turn's last event.
 	OnTurnFailed(turn int, reason string)
 	// OnTurnEnded is turn ending with nothing to say. It is the turn's last event.
 	OnTurnEnded(turn int)
 	// OnDeviceChanged says the timers or alarms changed.
 	OnDeviceChanged()
+
+	// OnCallReady says the call is live: Muse is listening.
+	OnCallReady(call int)
+	// OnCallAudio is Muse's voice in the call, CallRate PCM, to play in order.
+	OnCallAudio(call int, pcm []byte)
+	// OnCallFlush says to drop Muse's voice not yet played: it was cut off.
+	OnCallFlush(call int)
+	// OnCallHeard is what Muse made of the caller's last turn.
+	OnCallHeard(call int, text string)
+	// OnCallSaid is Muse's words so far in the reply it is speaking.
+	OnCallSaid(call int, text string)
+	// OnCallHold is Muse asking for no audio for now (held), and then for audio again.
+	OnCallHold(call int, held bool)
+	// OnCallStop is Muse ending the call after a goodbye: play out Muse's voice, then HangUp.
+	OnCallStop(call int)
+	// OnCallOpus is one packet of Muse's voice in a video call: Opus, 48 kHz mono, in order.
+	OnCallOpus(call int, packet []byte)
+	// OnCallVideo is one access unit of Muse's picture in a video call: H.264, Annex B. width and
+	// height are 0 when not known.
+	OnCallVideo(call int, unit []byte, width, height int)
+	// OnCallEnded is the call over. live is whether it was ever ready; reason is CallDeclined or
+	// CallUnreachable for one that never was, or why it ended, in words for the log.
+	OnCallEnded(call int, reason string, live bool)
 
 	// SetVolume sets the speaker, 0 to VolumeSteps, and returns where it ended up.
 	SetVolume(level int) int
@@ -75,6 +101,8 @@ type Status struct {
 	Phase string `json:"phase"`
 	// Username is who the Portal is paired as, once it is.
 	Username string `json:"username,omitempty"`
+	// AgentName is what the owner's Muse is called, once SyncAvatar has asked.
+	AgentName string `json:"agentName,omitempty"`
 	// BLEName is what the Muse app lists the Portal as while pairing.
 	BLEName string `json:"bleName,omitempty"`
 	// Error is why the Portal is offline, or what went wrong. Never a token.
@@ -115,6 +143,9 @@ type App struct {
 	pair        *openPairing
 	turnID      int
 	turn        *activeTurn
+	call        *activeCall
+	museVoice   bool
+	agentName   string
 }
 
 type running struct {
@@ -259,6 +290,7 @@ func (a *App) statusLocked() Status {
 	if a.st.Credentials != nil {
 		s.Username = a.st.Credentials.Username
 	}
+	s.AgentName = a.agentName
 	if a.st.Identity.Valid() {
 		s.BLEName = a.st.Identity.BLEName()
 	}
@@ -478,4 +510,15 @@ func (a *App) SetAlarm(hour, minute int, days, label string) error {
 	}
 	_, err = a.dev.SetAlarm(hour, minute, d, label)
 	return err
+}
+
+// setAgentName keeps what the owner's Muse is called, for the status.
+func (a *App) setAgentName(name string) {
+	a.mu.Lock()
+	changed := a.agentName != name
+	a.agentName = name
+	a.mu.Unlock()
+	if changed {
+		a.changed()
+	}
 }

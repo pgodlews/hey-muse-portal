@@ -337,13 +337,13 @@ func TestAskText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reply != (Reply{Text: "you said: hello"}) {
+	if reply.Text != "you said: hello" || reply.Heard != "" {
 		t.Errorf("reply = %+v", reply)
 	}
 	// The earlier message on the stream is not part of the answer, and a typed message has no
 	// transcript to report. The fake sends the whole answer ahead of the acknowledgment, as the
 	// real service can, so it is all there by the time the device knows which message was its own.
-	want := []ReplyEvent{ReplyText{Text: "you said: hello"}, Settled{Text: "you said: hello"}}
+	want := []ReplyEvent{ReplyText{Text: "you said: hello"}, Settled{Text: "you said: hello", MessageIDs: []string{"assistant-msg-u1"}}}
 	if got := events(); !reflect.DeepEqual(got, want) {
 		t.Errorf("events = %#v", got)
 	}
@@ -385,7 +385,7 @@ func TestReplyStreams(t *testing.T) {
 	want := []ReplyEvent{
 		ReplyText{Text: "you sai"},
 		ReplyText{Text: "you said: hello"},
-		Settled{Text: "you said: hello"},
+		Settled{Text: "you said: hello", MessageIDs: []string{"assistant-msg-u1"}},
 	}
 	if got := events(); !reflect.DeepEqual(got, want) {
 		t.Errorf("events = %#v", got)
@@ -409,11 +409,12 @@ func TestAskVoiceNote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reply != (Reply{Text: "you said: a voice note", Heard: "a voice note"}) {
+	if reply.Text != "you said: a voice note" || reply.Heard != "a voice note" {
 		t.Errorf("reply = %+v", reply)
 	}
 	got := events()
-	if got[0] != (Heard{Text: "a voice note"}) || got[len(got)-1] != (Settled{Text: "you said: a voice note"}) {
+	last, _ := got[len(got)-1].(Settled)
+	if got[0] != (Heard{Text: "a voice note"}) || last.Text != "you said: a voice note" || len(last.MessageIDs) == 0 {
 		t.Errorf("events = %#v", got)
 	}
 

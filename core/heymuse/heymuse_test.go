@@ -39,12 +39,25 @@ func (h *fakeHost) OnAnswer(turn int, text string)       { h.events <- "answer:"
 func (h *fakeHost) OnTurnFailed(turn int, reason string) { h.events <- "failed:" + reason }
 func (h *fakeHost) OnTurnEnded(turn int)                 { h.events <- "ended" }
 func (h *fakeHost) OnDeviceChanged()                     {}
-func (h *fakeHost) SetVolume(level int) int              { h.volume = level; return level }
-func (h *fakeHost) Volume() int                          { return h.volume }
-func (h *fakeHost) Ring(kind, label string)              {}
-func (h *fakeHost) StopRinging() bool                    { return false }
-func (h *fakeHost) StopSpeaking()                        {}
-func (h *fakeHost) Log(level, line string)               {}
+func (h *fakeHost) OnAnswerAudio(turn int, text string, mp3 []byte) {
+	h.events <- "answer audio:" + text
+}
+func (h *fakeHost) OnCallReady(call int)              { h.events <- "call ready" }
+func (h *fakeHost) OnCallAudio(call int, pcm []byte)  {}
+func (h *fakeHost) OnCallFlush(call int)              {}
+func (h *fakeHost) OnCallHeard(call int, text string) {}
+func (h *fakeHost) OnCallSaid(call int, text string)  {}
+func (h *fakeHost) OnCallHold(call int, held bool)    {}
+func (h *fakeHost) OnCallStop(call int)               {}
+func (h *fakeHost) OnCallEnded(call int, reason string, live bool) {
+	h.events <- "call ended:" + reason
+}
+func (h *fakeHost) SetVolume(level int) int { h.volume = level; return level }
+func (h *fakeHost) Volume() int             { return h.volume }
+func (h *fakeHost) Ring(kind, label string) {}
+func (h *fakeHost) StopRinging() bool       { return false }
+func (h *fakeHost) StopSpeaking()           {}
+func (h *fakeHost) Log(level, line string)  {}
 
 func (h *fakeHost) next(t *testing.T) string {
 	t.Helper()
@@ -269,3 +282,6 @@ func TestEarsGiveUpOnSteadyRoomNoise(t *testing.T) {
 	}
 	t.Fatal("never gave up")
 }
+
+func (h *fakeHost) OnCallOpus(call int, packet []byte)                   {}
+func (h *fakeHost) OnCallVideo(call int, unit []byte, width, height int) {}
