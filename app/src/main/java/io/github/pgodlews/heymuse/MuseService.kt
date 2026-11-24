@@ -80,7 +80,7 @@ class MuseService : Service() {
     }
 
     private fun createChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "Hey Muse", NotificationManager.IMPORTANCE_LOW).apply {
+        val channel = NotificationChannel(CHANNEL_ID, "Muse Portal", NotificationManager.IMPORTANCE_LOW).apply {
             description = "Keeps Hey Muse listening in the background"
             setShowBadge(false)
         }
@@ -92,7 +92,7 @@ class MuseService : Service() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Hey Muse")
+            .setContentTitle("Muse Portal")
             .setContentText(text)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(open)

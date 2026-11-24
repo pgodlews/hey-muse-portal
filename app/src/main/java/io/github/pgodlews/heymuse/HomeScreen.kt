@@ -330,7 +330,7 @@ fun micWarningShort(state: UiState): String? = when (state.mic) {
 }
 
 fun micWarning(state: UiState): String? = when (state.mic) {
-    Mic.State.NO_PERMISSION -> "Hey Muse needs the microphone. Allow it when asked, or install with adb install -g."
+    Mic.State.NO_PERMISSION -> "Muse Portal needs the microphone. Allow it when asked, or install with adb install -g."
     Mic.State.SILENCED -> "The microphone hears nothing. Check the privacy switch, or turn off “Hey Portal” in the Portal's settings."
     Mic.State.FAILED -> "The microphone can't be opened right now. Hey Muse keeps trying."
     else -> null

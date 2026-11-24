@@ -101,7 +101,7 @@ The same works for `speech_key`, `voice` (`builtin`, or a cloud voice like `cora
 `speech_base`, `speech_model` and `display_name`. All of them can also be typed under Settings
 (the gear at the top right).
 
-Open **Hey Muse** from the Portal's apps list, or with
+Open **Muse Portal** (the app's name in the Portal's apps list), or start it with
 `adb shell am start -n io.github.pgodlews.heymuse/.MainActivity`.
 
 ### Free the microphone

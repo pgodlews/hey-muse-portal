@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Muse Portal's icon, foreground: the ring Muse sits in on the Portal, talking (three sound bars
+     for a mouth), with the green dot of a live call. Kept inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- A soft halo behind the ring. -->
+    <path android:fillColor="#33B9A4FF"
+        android:pathData="M54,25a29,29 0 1,1 0,58a29,29 0 1,1 0,-58z" />
+    <!-- The ring. -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFB9A4FF" android:strokeWidth="5"
+        android:pathData="M54,31a23,23 0 1,1 0,46a23,23 0 1,1 0,-46z" />
+    <!-- Three sound bars: Muse talking. -->
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M42.5,49.5a2.5,2.5 0 0,1 5,0v9a2.5,2.5 0 0,1 -5,0z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M51.5,43.5a2.5,2.5 0 0,1 5,0v21a2.5,2.5 0 0,1 -5,0z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M60.5,49.5a2.5,2.5 0 0,1 5,0v9a2.5,2.5 0 0,1 -5,0z" />
+    <!-- The live dot, on the ring. -->
+    <path android:fillColor="#FF120F1F"
+        android:pathData="M70.3,30.7a6.5,6.5 0 1,1 0,13a6.5,6.5 0 1,1 0,-13z" />
+    <path android:fillColor="#FF7DE2A6"
+        android:pathData="M70.3,32.7a4.5,4.5 0 1,1 0,9a4.5,4.5 0 1,1 0,-9z" />
+</vector>

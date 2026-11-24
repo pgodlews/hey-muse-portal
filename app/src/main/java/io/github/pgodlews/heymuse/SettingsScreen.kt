@@ -503,7 +503,7 @@ private fun AboutPage(avatarLoaded: Boolean, avatarPath: String) {
     val u = LocalDims.current
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(u.d(24))).background(Glass).padding(u.d(28)),
         verticalArrangement = Arrangement.spacedBy(u.d(14))) {
-        Text("Hey Muse ${BuildConfig.VERSION_NAME}", color = Ink, fontSize = u.t(26), fontWeight = FontWeight.SemiBold)
+        Text("Muse Portal ${BuildConfig.VERSION_NAME}", color = Ink, fontSize = u.t(26), fontWeight = FontWeight.SemiBold)
         Text("A hobby project, not made or endorsed by Meta. Muse is Meta’s, and using it this way is covered by Meta’s Gadget SDK Terms.",
             color = InkSoft, fontSize = u.t(19), lineHeight = u.t(27))
         Text("After “Hey Muse”, what you say goes to your Muse and is kept in your Muse account. Anyone who speaks to the Portal is " +
